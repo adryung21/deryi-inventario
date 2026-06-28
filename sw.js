@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deryi-inventario-v1';
+const CACHE_NAME = 'deryi-inventario-v2';
 const APP_SHELL = [
   './',
   './index.html',
