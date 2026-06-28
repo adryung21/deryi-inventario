@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DERYI INVENTARIO</title>
+  <meta name="theme-color" content="#062452" />
+  <meta name="description" content="DERYI INVENTARIO - Conteo físico por laboratorio con usuarios, bloqueos y sincronización en Firebase." />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="favicon.png" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+  <section id="authPage" class="auth-page">
+    <div class="auth-card">
+      <img src="assets/logo.png" class="auth-logo" alt="DERYI INVENTARIO" />
+      <div id="setupWarning" class="notice warn hidden"></div>
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-auth-tab="login">Ingresar</button>
+        <button type="button" class="auth-tab" data-auth-tab="register">Crear acceso</button>
+      </div>
+      <form id="loginForm" class="auth-form">
+        <label for="loginEmail">Correo</label>
+        <input id="loginEmail" type="email" autocomplete="email" required placeholder="usuario@correo.com" />
+        <label for="loginPassword">Contraseña</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Contraseña" />
+        <button type="submit" class="btn dark" style="width:100%; margin-top:12px;">Ingresar</button>
+      </form>
+      <form id="registerForm" class="auth-form hidden">
+        <div class="notice info">El administrador preautoriza el correo. Luego cada usuario crea su contraseña desde aquí.</div>
+        <label for="registerName">Nombre</label>
+        <input id="registerName" required placeholder="Nombre del usuario" />
+        <label for="registerEmail">Correo autorizado</label>
+        <input id="registerEmail" type="email" autocomplete="email" required placeholder="usuario@correo.com" />
+        <label for="registerPassword">Crear contraseña</label>
+        <input id="registerPassword" type="password" minlength="6" autocomplete="new-password" required placeholder="Mínimo 6 caracteres" />
+        <button type="submit" class="btn dark" style="width:100%; margin-top:12px;">Crear cuenta</button>
+      </form>
+      <div id="authMessage" class="notice hidden"></div>
+    </div>
+  </section>
+
+  <section id="appPage" class="app-shell hidden">
+    <button id="sideNavEdge" class="side-edge" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="sideNav"></button>
+    <nav id="sideNav" class="side-drawer" aria-label="Menú principal" aria-hidden="true">
+      <img src="assets/logo.png" class="side-logo" alt="DERYI INVENTARIO" />
+      <div class="side-user">
+        <div class="strong" id="sideUserName">-</div>
+        <div id="sideUserEmail">-</div>
+        <div id="sideUserRole">-</div>
+        <div id="syncState">Conectando...</div>
+      </div>
+      <div class="side-title">Menú</div>
+      <button class="tab-btn admin-only active" data-tab="carga">Carga de inventario</button>
+      <button class="tab-btn" data-tab="vista">Vista de inventario</button>
+      <button class="tab-btn" data-tab="generacion">Generación de inventario</button>
+      <button class="tab-btn admin-only" data-tab="usuarios">Usuarios</button>
+      <div class="side-bottom">
+        <button id="installBtn" class="btn ghost hidden" type="button">Instalar app</button>
+        <button id="logoutBtn" class="btn secondary" type="button">Cerrar sesión</button>
+      </div>
+    </nav>
+
+    <section id="tab-carga" class="panel active admin-panel">
+      <h2>Carga de inventario</h2>
+      <div class="notice">
+        Carga el archivo original. El sistema elimina automáticamente productos con <strong>Stock Actual = 0</strong> y reemplaza el inventario anterior en Firebase.
+      </div>
+      <div class="grid">
+        <div class="span-6">
+          <label for="fileInput">Seleccionar archivo Excel / ODS / CSV</label>
+          <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.ods" />
+        </div>
+        <div class="span-3">
+          <button class="btn" id="btnLoadFile" type="button">Leer y guardar</button>
+        </div>
+        <div class="span-3">
+          <button class="btn secondary" id="btnRefreshCloud" type="button">Actualizar datos</button>
+        </div>
+      </div>
+      <div class="cards">
+        <div class="card"><div class="label">Productos guardados</div><div class="metric" id="mItems">0</div></div>
+        <div class="card"><div class="label">Laboratorios</div><div class="metric" id="mLabs">0</div></div>
+        <div class="card"><div class="label">Conteos registrados</div><div class="metric" id="mCounts">0</div></div>
+        <div class="card"><div class="label">Stock cero eliminado</div><div class="metric" id="mSkipped">0</div></div>
+      </div>
+      <div id="loadMessage" class="notice warn">No se ha cargado inventario en esta sesión.</div>
+      <h3>Laboratorios</h3>
+      <div id="labList" class="lab-list"></div>
+    </section>
+
+    <section id="tab-vista" class="panel">
+      <div class="panel-head">
+        <h2>Vista de inventario</h2>
+        <button class="panel-toggle" type="button" data-toggle-section="viewControls" data-label-show="Mostrar filtros y resumen" data-label-hide="Ocultar filtros y resumen" aria-expanded="true" aria-controls="viewControls"><span class="toggle-icon">▾</span><span class="toggle-text">Ocultar filtros y resumen</span></button>
+      </div>
+      <div id="viewControls" class="collapsible-tools">
+        <div class="grid">
+          <div class="span-4"><label for="viewLab">Laboratorio</label><input id="viewLab" list="labOptions" placeholder="Todos / escribir laboratorio" autocomplete="off" /></div>
+          <div class="span-4"><label for="viewDesc">Filtro por descripción</label><input id="viewDesc" placeholder="Buscar producto" /></div>
+          <div class="span-4"><label for="viewAny">Filtro en cualquier celda</label><input id="viewAny" placeholder="Descripción, laboratorio, stock..." /></div>
+        </div>
+        <div class="cards">
+          <div class="card"><div class="label">Artículos filtrados</div><div class="metric" id="vItems">0</div></div>
+          <div class="card"><div class="label">Stock total en unidades</div><div class="metric" id="vTotalUnits">0</div></div>
+          <div class="card"><div class="label">Enteros sistema</div><div class="metric" id="vEnteros">0</div></div>
+          <div class="card"><div class="label">Unidades sueltas sistema</div><div class="metric" id="vUnidades">0</div></div>
+        </div>
+      </div>
+      <div id="viewCards" class="inventory-card-list"></div>
+    </section>
+
+    <section id="tab-generacion" class="panel">
+      <div class="panel-head">
+        <h2>Generación de inventario</h2>
+        <button class="panel-toggle" type="button" data-toggle-section="genControls" data-label-show="Mostrar filtros y resumen" data-label-hide="Ocultar filtros y resumen" aria-expanded="true" aria-controls="genControls"><span class="toggle-icon">▾</span><span class="toggle-text">Ocultar filtros y resumen</span></button>
+      </div>
+      <div id="genControls" class="collapsible-tools">
+        <div class="grid">
+          <div class="span-3"><label for="genLab">Laboratorio</label><input id="genLab" list="labOptions" placeholder="Escribir laboratorio" autocomplete="off" /></div>
+          <div class="span-3"><label for="genSearch">Buscar producto</label><input id="genSearch" placeholder="Buscar descripción" /></div>
+          <div class="span-3"><button class="btn secondary" id="btnOnlyDiff" type="button">Mostrar solo novedades</button></div>
+          <div class="span-3"><button class="btn" id="btnPdf" type="button">Generar PDF</button></div>
+          <div class="span-12 right-actions">
+            <button class="btn dark" id="btnTakeLab" type="button">Tomar laboratorio</button>
+            <button class="btn secondary" id="btnReleaseLab" type="button">Liberar laboratorio</button>
+            <button class="btn" id="btnFinishLab" type="button">Finalizar laboratorio</button>
+            <button class="btn secondary" id="btnCsv" type="button">Exportar novedades CSV</button>
+          </div>
+        </div>
+        <div class="cards">
+          <div class="card"><div class="label">Artículos en pantalla</div><div class="metric" id="gItems">0</div></div>
+          <div class="card"><div class="label">Conteados</div><div class="metric" id="gCounted">0</div></div>
+          <div class="card"><div class="label">Faltantes</div><div class="metric" id="gMissing">0</div></div>
+          <div class="card"><div class="label">Sobrantes</div><div class="metric" id="gSurplus">0</div></div>
+        </div>
+        <div id="lockBanner" class="notice info lock-banner">Selecciona un laboratorio para iniciar.</div>
+      </div>
+      <div id="genBody" class="inventory-card-list"></div>
+    </section>
+
+    <section id="tab-usuarios" class="panel admin-panel">
+      <h2>Usuarios</h2>
+      <div class="notice info">El administrador preautoriza un correo. El usuario luego crea su cuenta y contraseña desde “Crear acceso”.</div>
+      <div class="grid">
+        <div class="span-4"><label for="newUserName">Nombre</label><input id="newUserName" placeholder="Nombre del usuario" /></div>
+        <div class="span-4"><label for="newUserEmail">Correo</label><input id="newUserEmail" type="email" placeholder="usuario@correo.com" /></div>
+        <div class="span-2"><label for="newUserRole">Rol</label><select id="newUserRole"><option value="inventariador">Inventariador</option><option value="admin">Administrador</option></select></div>
+        <div class="span-2"><button class="btn" id="btnCreateUser" type="button">Autorizar</button></div>
+      </div>
+      <div id="userMessage" class="notice hidden"></div>
+      <table class="user-table">
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead>
+        <tbody id="usersBody"></tbody>
+      </table>
+    </section>
+  </section>
+
+  <datalist id="labOptions"></datalist>
+
+  <div id="factorModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="factorModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div><h3 id="factorModalTitle">Editar Unid/Entero</h3><div class="small">Este valor recalcula enteros, unidades y total del sistema.</div></div>
+        <button class="modal-close" id="btnCloseFactor" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-product">
+        <label>Descripción</label>
+        <div id="modalDesc" class="inventory-item-title">-</div>
+        <div class="modal-grid">
+          <div class="modal-metric"><div class="label">Laboratorio</div><div class="value" id="modalLab">-</div></div>
+          <div class="modal-metric"><div class="label">Stock actual</div><div class="value" id="modalStock">-</div></div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="span-6"><label for="modalFactor">Unid/Entero</label><input id="modalFactor" type="number" min="1" step="1" inputmode="numeric" /></div>
+        <div class="span-6"><div class="notice info" id="modalCalc">-</div></div>
+        <div class="span-12 right-actions">
+          <button class="btn secondary" id="btnCancelFactor" type="button">Cancelar</button>
+          <button class="btn" id="btnSaveFactor" type="button">Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

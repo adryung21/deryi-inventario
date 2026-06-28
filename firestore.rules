@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isBootstrapAdmin() {
+      return signedIn() && request.auth.token.email == 'adrian90.2y@gmail.com';
+    }
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function isAdmin() {
+      return isBootstrapAdmin() || (signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userDoc().data.role == 'admin');
+    }
+    function isAllowedEmail() {
+      return signedIn() && exists(/databases/$(database)/documents/allowedEmails/$(request.auth.token.email));
+    }
+
+    match /allowedEmails/{email} {
+      allow read: if isAdmin() || (signedIn() && request.auth.token.email == email);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /users/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create: if signedIn() && request.auth.uid == uid && (isBootstrapAdmin() || isAllowedEmail());
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if isAdmin();
+    }
+
+    match /inventory/{productId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /counts/{productId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() || (
+        signedIn()
+        && request.resource.data.labKey is string
+        && exists(/databases/$(database)/documents/labLocks/$(request.resource.data.labKey))
+        && get(/databases/$(database)/documents/labLocks/$(request.resource.data.labKey)).data.lockedByUid == request.auth.uid
+        && get(/databases/$(database)/documents/labLocks/$(request.resource.data.labKey)).data.status == 'active'
+        && get(/databases/$(database)/documents/labLocks/$(request.resource.data.labKey)).data.expiresAtMs > request.time.toMillis()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /labLocks/{labKey} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.lockedByUid == request.auth.uid;
+      allow update: if isAdmin() || (
+        signedIn() && (
+          resource.data.lockedByUid == request.auth.uid
+          || resource.data.status != 'active'
+          || resource.data.expiresAtMs <= request.time.toMillis()
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /labCompletions/{labKey} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
+    match /appMeta/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
