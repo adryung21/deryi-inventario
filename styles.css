@@ -386,3 +386,34 @@ input[type="file"] { padding: 10px; }
   .system-chip { font-size: 10px; padding: 5px; }
   .system-chip strong { font-size: 15px; }
 }
+
+/* Corrección: menú lateral con scroll para pantallas pequeñas */
+.side-drawer {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+}
+.side-bottom {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding-top: 10px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(255,255,255,.78) 0%, rgba(255,255,255,.98) 30%, rgba(255,255,255,.98) 100%);
+  border-top: 1px solid rgba(217,226,236,.75);
+}
+.side-logo {
+  max-height: 150px;
+  object-fit: contain;
+}
+@media (max-height: 720px) {
+  .side-drawer { gap: 8px; padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .side-logo { max-height: 98px; margin-bottom: 4px; }
+  .side-user { padding: 8px; font-size: 11px; }
+  .side-title { margin-top: 2px; }
+  .tab-btn { padding: 10px 12px; min-height: 40px; }
+  .side-bottom { gap: 6px; padding-top: 8px; }
+  .side-bottom .btn { padding: 10px 12px; }
+}
