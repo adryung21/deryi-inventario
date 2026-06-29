@@ -89,29 +89,32 @@
         <div class="card"><div class="label">Stock cero eliminado</div><div class="metric" id="mSkipped">0</div></div>
       </div>
       <div id="loadMessage" class="notice warn">No se ha cargado inventario en esta sesión.</div>
-      <h3>Laboratorios</h3>
-      <div id="labList" class="lab-list"></div>
+
+      <div class="panel-head admin-detail-head">
+        <h3>Detalle de inventario cargado</h3>
+        <button class="panel-toggle" type="button" data-toggle-section="adminViewControls" data-label-show="Mostrar filtros y resumen" data-label-hide="Ocultar filtros y resumen" aria-expanded="true" aria-controls="adminViewControls"><span class="toggle-icon">▾</span><span class="toggle-text">Ocultar filtros y resumen</span></button>
+      </div>
+      <div id="adminViewControls" class="collapsible-tools">
+        <div class="grid">
+          <div class="span-4"><label for="adminViewLab">Laboratorio</label><input id="adminViewLab" list="labOptions" placeholder="Todos / escribir laboratorio" autocomplete="off" /></div>
+          <div class="span-4"><label for="adminViewDesc">Filtro por descripción</label><input id="adminViewDesc" placeholder="Buscar producto" /></div>
+          <div class="span-4"><label for="adminViewAny">Filtro en cualquier celda</label><input id="adminViewAny" placeholder="Descripción, laboratorio, stock..." /></div>
+        </div>
+        <div class="cards">
+          <div class="card"><div class="label">Artículos filtrados</div><div class="metric" id="aItems">0</div></div>
+          <div class="card"><div class="label">Stock total en unidades</div><div class="metric" id="aTotalUnits">0</div></div>
+          <div class="card"><div class="label">Enteros sistema</div><div class="metric" id="aEnteros">0</div></div>
+          <div class="card"><div class="label">Unidades sueltas sistema</div><div class="metric" id="aUnidades">0</div></div>
+        </div>
+      </div>
+      <div id="adminViewCards" class="inventory-card-list"></div>
     </section>
 
     <section id="tab-vista" class="panel">
-      <div class="panel-head">
-        <h2>Vista de inventario</h2>
-        <button class="panel-toggle" type="button" data-toggle-section="viewControls" data-label-show="Mostrar filtros y resumen" data-label-hide="Ocultar filtros y resumen" aria-expanded="true" aria-controls="viewControls"><span class="toggle-icon">▾</span><span class="toggle-text">Ocultar filtros y resumen</span></button>
-      </div>
-      <div id="viewControls" class="collapsible-tools">
-        <div class="grid">
-          <div class="span-4"><label for="viewLab">Laboratorio</label><input id="viewLab" list="labOptions" placeholder="Todos / escribir laboratorio" autocomplete="off" /></div>
-          <div class="span-4"><label for="viewDesc">Filtro por descripción</label><input id="viewDesc" placeholder="Buscar producto" /></div>
-          <div class="span-4"><label for="viewAny">Filtro en cualquier celda</label><input id="viewAny" placeholder="Descripción, laboratorio, stock..." /></div>
-        </div>
-        <div class="cards">
-          <div class="card"><div class="label">Artículos filtrados</div><div class="metric" id="vItems">0</div></div>
-          <div class="card"><div class="label">Stock total en unidades</div><div class="metric" id="vTotalUnits">0</div></div>
-          <div class="card"><div class="label">Enteros sistema</div><div class="metric" id="vEnteros">0</div></div>
-          <div class="card"><div class="label">Unidades sueltas sistema</div><div class="metric" id="vUnidades">0</div></div>
-        </div>
-      </div>
-      <div id="viewCards" class="inventory-card-list"></div>
+      <h2>Vista de inventario</h2>
+      <div class="notice info">Selecciona un laboratorio para generar automáticamente el inventario. Los laboratorios bloqueados o finalizados se muestran con su estado actual.</div>
+      <h3>Laboratorios</h3>
+      <div id="viewLabList" class="lab-list"></div>
     </section>
 
     <section id="tab-generacion" class="panel">

@@ -35,7 +35,7 @@ const getValue = (id, fallback = '') => {
 };
 const nf = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 });
 const dtf = new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-const appVersion = 'PWA Firebase v1.4 update-summary';
+const appVersion = 'PWA Firebase v1.5 swap-vista-carga';
 
 let app, auth, db;
 let unsubscribers = [];
@@ -347,7 +347,7 @@ function setSectionCollapsed(targetId, collapsed) {
 }
 
 function applyCollapsePrefs() {
-  ['viewControls', 'genControls'].forEach(id => {
+  ['adminViewControls', 'viewControls', 'genControls'].forEach(id => {
     let collapsed = false;
     try { collapsed = localStorage.getItem('deryi_ui_' + id) === '1'; } catch {}
     setSectionCollapsed(id, collapsed);
@@ -434,15 +434,12 @@ function renderMetrics() {
   }
 }
 
-function renderLabList() {
-  const box = $('labList');
-  if (!box) return;
+function buildLabListHtml() {
   const labs = getLabSummary();
   if (!labs.length) {
-    box.innerHTML = '<div class="inventory-card-empty">Cuando cargues inventario aparecerá aquí la lista de laboratorios.</div>';
-    return;
+    return '<div class="inventory-card-empty">Cuando se cargue inventario aparecerá aquí la lista de laboratorios.</div>';
   }
-  box.innerHTML = labs.map(l => {
+  return labs.map(l => {
     const lock = state.locks[l.key];
     const locked = isLockActive(lock) && lock.lockedByUid !== state.user?.uid;
     const mine = isLockActive(lock) && lock.lockedByUid === state.user?.uid;
@@ -470,6 +467,14 @@ function renderLabList() {
   }).join('');
 }
 
+function renderLabList() {
+  const html = buildLabListHtml();
+  ['labList', 'viewLabList'].forEach(id => {
+    const box = $(id);
+    if (box) box.innerHTML = html;
+  });
+}
+
 function rowMatches(row, query) {
   const q = normalizeKey(query);
   if (!q) return true;
@@ -477,10 +482,10 @@ function rowMatches(row, query) {
     .some(v => normalizeKey(v).includes(q));
 }
 
-function filteredViewRows() {
-  const lab = normalizeKey(getValue('viewLab'));
-  const desc = normalizeKey(getValue('viewDesc'));
-  const any = getValue('viewAny');
+function filteredAdminRows() {
+  const lab = normalizeKey(getValue('adminViewLab'));
+  const desc = normalizeKey(getValue('adminViewDesc'));
+  const any = getValue('adminViewAny');
   return sortRowsByDescription(state.inventory.filter(r => {
     if (lab && !normalizeKey(r.laboratorio).includes(lab)) return false;
     if (desc && !normalizeKey(r.descripcion).includes(desc)) return false;
@@ -489,15 +494,17 @@ function filteredViewRows() {
   }));
 }
 
-function renderView() {
-  const rows = filteredViewRows();
-  $('vItems').textContent = nf.format(rows.length);
-  $('vTotalUnits').textContent = nf.format(rows.reduce((s,r) => s + (Number(r.totalUnits) || 0), 0));
-  $('vEnteros').textContent = nf.format(rows.reduce((s,r) => s + (Number(r.enteros) || 0), 0));
-  $('vUnidades').textContent = nf.format(rows.reduce((s,r) => s + (Number(r.unidades) || 0), 0));
-  const body = $('viewCards');
+function renderAdminInventory() {
+  const body = $('adminViewCards');
+  if (!body) return;
+  const rows = filteredAdminRows();
+  const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+  setText('aItems', nf.format(rows.length));
+  setText('aTotalUnits', nf.format(rows.reduce((s,r) => s + (Number(r.totalUnits) || 0), 0)));
+  setText('aEnteros', nf.format(rows.reduce((s,r) => s + (Number(r.enteros) || 0), 0)));
+  setText('aUnidades', nf.format(rows.reduce((s,r) => s + (Number(r.unidades) || 0), 0)));
   if (!state.inventory.length) {
-    body.innerHTML = '<div class="inventory-card-empty">El administrador debe cargar un inventario.</div>';
+    body.innerHTML = '<div class="inventory-card-empty">Carga primero un archivo de inventario.</div>';
     return;
   }
   if (!rows.length) {
@@ -519,6 +526,12 @@ function renderView() {
         <div class="factor-source">Detección: ${escapeHtml(r.factorSource || 'Sin detalle')}</div>
       </div>
     </article>`).join('');
+}
+
+function renderView() {
+  // La pestaña Vista ahora muestra laboratorios para todos los usuarios.
+  // El detalle de productos se movió a Carga de inventario, solo para administrador.
+  renderLabList();
 }
 
 function filteredGenerationRows() {
@@ -685,6 +698,7 @@ function renderAll() {
   populateLabOptions();
   renderMetrics();
   renderLabList();
+  renderAdminInventory();
   renderView();
   if (keepEditing) {
     updateGenerationSummary();
@@ -1207,7 +1221,7 @@ function attachEvents() {
   $('btnLoadFile').addEventListener('click', loadFile);
   $('btnRefreshCloud').addEventListener('click', renderAll);
   $('btnCreateUser').addEventListener('click', () => createAllowedUser().catch(err => showMessage($('userMessage'), err.message, 'danger')));
-  ['viewLab','viewDesc','viewAny'].forEach(id => $(id).addEventListener('input', renderView));
+  ['adminViewLab','adminViewDesc','adminViewAny'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', renderAdminInventory); });
   ['genLab','genSearch'].forEach(id => $(id).addEventListener('input', renderGeneration));
   $('btnOnlyDiff').addEventListener('click', () => { state.showOnlyDiff = !state.showOnlyDiff; renderGeneration(); });
   $('btnTakeLab').addEventListener('click', takeSelectedLab);

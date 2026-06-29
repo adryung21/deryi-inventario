@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deryi-inventario-v6-user-colors';
+const CACHE_NAME = 'deryi-inventario-v7-swap-vista-carga';
 const APP_SHELL = [
   './',
   './index.html',
