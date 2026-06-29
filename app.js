@@ -222,6 +222,13 @@ function fmtDate(ms) {
   try { return dtf.format(new Date(ms)); } catch { return 'Sin conteo registrado'; }
 }
 
+function userColorClass(value) {
+  const raw = String(value || 'usuario').toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0;
+  return 'user-color-' + (Math.abs(hash) % 8);
+}
+
 function safeFileName(value) {
   return normalizeKey(value || 'TODOS').replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'inventario';
 }
@@ -382,13 +389,32 @@ function getLabSummary() {
   const map = new Map();
   for (const row of state.inventory) {
     const key = row.labKey;
-    if (!map.has(key)) map.set(key, { key, lab: row.laboratorio, total: 0, counted: 0, missing: 0, surplus: 0, lastMs: 0 });
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        lab: row.laboratorio,
+        total: 0,
+        counted: 0,
+        missing: 0,
+        surplus: 0,
+        lastMs: 0,
+        lastUserName: '',
+        lastUserEmail: '',
+        lastUserUid: ''
+      });
+    }
     const item = map.get(key);
     item.total++;
     const c = state.counts[row.id];
     if (c) {
       item.counted++;
-      item.lastMs = Math.max(item.lastMs || 0, Number(c.updatedAtMs || 0));
+      const updatedAtMs = Number(c.updatedAtMs || 0);
+      if (updatedAtMs >= (item.lastMs || 0)) {
+        item.lastMs = updatedAtMs;
+        item.lastUserName = c.updatedByName || '';
+        item.lastUserEmail = c.updatedByEmail || '';
+        item.lastUserUid = c.updatedByUid || '';
+      }
       const diff = getDifference(row);
       if (diff < 0) item.missing++;
       if (diff > 0) item.surplus++;
@@ -424,11 +450,17 @@ function renderLabList() {
     const cls = complete ? 'complete' : locked ? 'locked' : '';
     const status = complete ? 'Completo' : locked ? `En proceso por ${escapeHtml(lock.userName || lock.userEmail || 'usuario')}` : mine ? 'En proceso por ti' : `${l.counted} / ${l.total}`;
     const sub = complete ? 'Inventario finalizado' : locked ? 'Laboratorio bloqueado temporalmente' : 'Tocar para generar inventario';
+    const userLabel = l.lastUserName || l.lastUserEmail || '';
+    const colorClass = userColorClass(l.lastUserEmail || l.lastUserUid || l.lastUserName || l.lab);
+    const userHtml = userLabel
+      ? `<div class="lab-user-line">Último usuario: <span class="user-chip ${colorClass}">${escapeHtml(userLabel)}</span></div>`
+      : '<div class="lab-user-line no-user">Usuario: sin registro</div>';
     return `<button class="lab-card ${cls}" type="button" data-lab-open="${escapeHtml(l.lab)}">
       <div>
         <div class="lab-name">${escapeHtml(l.lab)}</div>
         <div class="lab-sub">${sub}</div>
         <div class="lab-date">Último conteo: ${escapeHtml(fmtDate(l.lastMs))}</div>
+        ${userHtml}
       </div>
       <div class="lab-stats">
         <div><div class="lab-badge-label">Productos</div><div class="lab-badge">${nf.format(l.total)}</div></div>

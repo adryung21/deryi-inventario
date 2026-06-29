@@ -241,6 +241,37 @@ input[type="file"] { padding: 10px; }
 .lab-name { font-size: 18px; font-weight: 900; overflow-wrap: anywhere; }
 .lab-sub { margin-top: 4px; color: var(--brand); font-weight: 900; }
 .lab-date { margin-top: 12px; color: var(--muted); font-size: 13px; font-weight: 800; }
+.lab-user-line {
+  margin-top: 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 900;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.lab-user-line.no-user { color: var(--muted); }
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid transparent;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.user-color-0 { background: #dbeafe; color: #1e3a8a; border-color: #bfdbfe; }
+.user-color-1 { background: #dcfce7; color: #14532d; border-color: #bbf7d0; }
+.user-color-2 { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.user-color-3 { background: #fce7f3; color: #831843; border-color: #fbcfe8; }
+.user-color-4 { background: #ede9fe; color: #4c1d95; border-color: #ddd6fe; }
+.user-color-5 { background: #cffafe; color: #164e63; border-color: #a5f3fc; }
+.user-color-6 { background: #ffedd5; color: #7c2d12; border-color: #fed7aa; }
+.user-color-7 { background: #e0f2fe; color: #075985; border-color: #bae6fd; }
 .lab-stats { display: grid; gap: 8px; min-width: 96px; justify-items: center; }
 .lab-badge-label { color: var(--muted); font-size: 12px; font-weight: 900; }
 .lab-badge {
