@@ -577,8 +577,8 @@ function generationCard(r, canEdit, otherLock) {
       <div class="physical-panel">
         <div class="physical-label">Conteo físico</div>
         <div class="physical-inputs">
-          <div class="physical-input-group"><label>Enteros</label><input class="count-input ${cls}" type="number" min="0" step="1" inputmode="numeric" data-row-id="${escapeHtml(r.id)}" data-count-kind="enteros" value="${parts.enteros === '' ? '' : Number(parts.enteros)}" ${disabled}></div>
-          <div class="physical-input-group"><label>Unidades</label><input class="count-input ${cls}" type="number" min="0" step="1" inputmode="numeric" data-row-id="${escapeHtml(r.id)}" data-count-kind="unidades" value="${parts.unidades === '' ? '' : Number(parts.unidades)}" ${disabled}></div>
+          <div class="physical-input-group"><label>Enteros</label><input class="count-input ${cls}" type="tel" inputmode="numeric" pattern="[0-9]*" data-row-id="${escapeHtml(r.id)}" data-count-kind="enteros" value="${parts.enteros === '' ? '' : Number(parts.enteros)}" oninput="window.deryiHandleCountInput && window.deryiHandleCountInput(this)" onchange="window.deryiHandleCountCommit && window.deryiHandleCountCommit(this)" onblur="window.deryiHandleCountCommit && window.deryiHandleCountCommit(this)" ${disabled}></div>
+          <div class="physical-input-group"><label>Unidades</label><input class="count-input ${cls}" type="tel" inputmode="numeric" pattern="[0-9]*" data-row-id="${escapeHtml(r.id)}" data-count-kind="unidades" value="${parts.unidades === '' ? '' : Number(parts.unidades)}" oninput="window.deryiHandleCountInput && window.deryiHandleCountInput(this)" onchange="window.deryiHandleCountCommit && window.deryiHandleCountCommit(this)" onblur="window.deryiHandleCountCommit && window.deryiHandleCountCommit(this)" ${disabled}></div>
         </div>
         <div class="physical-total-row"><span>Total físico</span><span class="count-total-value ${cls}">${parts.counted ? nf.format(parts.total) : '-'}</span></div>
         <div class="count-meta">${escapeHtml(lockNote)}${c.updatedByName ? `<br>Último: ${escapeHtml(c.updatedByName)} · ${escapeHtml(fmtDate(c.updatedAtMs))}` : ''}</div>
@@ -627,12 +627,22 @@ function renderUsers() {
   </tr>`).join('');
 }
 
+function isEditingCountInput() {
+  const active = document.activeElement;
+  return !!(active && active.classList && active.classList.contains('count-input') && active.closest('#tab-generacion'));
+}
+
 function renderAll() {
+  const keepEditing = isEditingCountInput();
   populateLabOptions();
   renderMetrics();
   renderLabList();
   renderView();
-  renderGeneration();
+  if (keepEditing) {
+    updateGenerationSummary();
+  } else {
+    renderGeneration();
+  }
   renderUsers();
 }
 
@@ -903,6 +913,29 @@ function updateCountCardVisual(input) {
   if (totalEl) totalEl.textContent = nf.format(data.total);
   const diffEl = data.card.querySelector('.diff-inline');
   if (diffEl) diffEl.innerHTML = diffInline(data.diff);
+  // Guardado local inmediato para evitar que una actualización en tiempo real borre lo digitado
+  // antes de que Firebase confirme el cambio.
+  state.counts[data.row.id] = {
+    ...(state.counts[data.row.id] || {}),
+    productId: data.row.id,
+    laboratorio: data.row.laboratorio,
+    labKey: data.row.labKey,
+    descripcion: data.row.descripcion,
+    unitsPerEntero: data.row.unitsPerEntero,
+    systemEnteros: data.row.enteros,
+    systemUnidades: data.row.unidades,
+    systemTotal: data.row.totalUnits,
+    physicalEnteros: data.enteros === '' ? '' : data.enteros,
+    physicalUnidades: data.unidades === '' ? '' : data.unidades,
+    total: data.total,
+    diff: data.diff,
+    novelty: noveltyText(data.diff),
+    updatedByUid: state.user?.uid || '',
+    updatedByName: state.profile?.name || state.user?.email || '',
+    updatedByEmail: state.user?.email || '',
+    updatedAtMs: Date.now(),
+    localDraft: true
+  };
   return data;
 }
 
@@ -954,6 +987,23 @@ function scheduleCountSave(input) {
     });
   }, 450));
 }
+
+function handleCountInputInline(input) {
+  updateCountCardVisual(input);
+  scheduleCountSave(input);
+}
+
+function handleCountCommitInline(input) {
+  const data = readCountCard(input);
+  if (data) clearTimeout(countSaveTimers.get(data.row.id));
+  updateCountFromInput(input).catch(err => {
+    console.error(err);
+    alert('No se pudo guardar el conteo: ' + (err.message || err));
+  });
+}
+
+window.deryiHandleCountInput = handleCountInputInline;
+window.deryiHandleCountCommit = handleCountCommitInline;
 
 function openFactorModal(id) {
   const row = state.inventory.find(r => r.id === id);
