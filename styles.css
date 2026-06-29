@@ -47,7 +47,7 @@ button, input, select { font-family: inherit; }
   padding: 22px;
 }
 .auth-logo { width: 100%; max-width: 310px; display: block; margin: 0 auto 16px; }
-.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 16px; }
+.auth-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 16px; }
 .auth-tab {
   border: 1px solid var(--line);
   background: #fff;
@@ -57,6 +57,11 @@ button, input, select { font-family: inherit; }
   cursor: pointer;
 }
 .auth-tab.active { background: var(--brand-dark); color: #fff; border-color: var(--brand-dark); }
+@media (max-width: 420px) {
+  .auth-tabs { gap: 6px; }
+  .auth-tab { padding: 9px 6px; font-size: 12px; }
+}
+
 
 .app-shell { max-width: 1440px; margin: 0 auto; padding: 18px 28px 36px; }
 .panel {

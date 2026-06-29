@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deryi-inventario-v9';
+const CACHE_NAME = 'deryi-inventario-v8-reset-login';
 const APP_SHELL = [
   './',
   './index.html',

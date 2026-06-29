@@ -36,7 +36,7 @@ const getValue = (id, fallback = '') => {
 };
 const nf = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 });
 const dtf = new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-const appVersion = 'PWA Firebase v1.7 usuarios-borrar';
+const appVersion = 'PWA Firebase v1.8 reset-login';
 
 let app, auth, db;
 let unsubscribers = [];
@@ -268,11 +268,24 @@ function switchAuthTab(tab) {
   document.querySelectorAll('.auth-tab').forEach(b => b.classList.toggle('active', b.dataset.authTab === tab));
   $('loginForm').classList.toggle('hidden', tab !== 'login');
   $('registerForm').classList.toggle('hidden', tab !== 'register');
+  const resetForm = $('resetForm');
+  if (resetForm) resetForm.classList.toggle('hidden', tab !== 'reset');
+  if (tab === 'reset') {
+    const resetEmail = $('resetEmail');
+    const loginEmail = getValue('loginEmail').trim();
+    if (resetEmail && loginEmail && !resetEmail.value) resetEmail.value = loginEmail;
+  }
   clearMessage($('authMessage'));
 }
 
 async function login(email, password) {
   await signInWithEmailAndPassword(auth, email, password);
+}
+
+async function sendLoginPasswordReset(email) {
+  const lower = normalizeText(email).toLowerCase();
+  if (!lower) throw new Error('Ingresa el correo registrado.');
+  await sendPasswordResetEmail(auth, lower);
 }
 
 async function registerUser(name, email, password) {
@@ -1453,6 +1466,18 @@ function attachEvents() {
       await registerUser(getValue('registerName'), getValue('registerEmail'), getValue('registerPassword'));
       showMessage($('authMessage'), 'Cuenta creada correctamente.', 'info');
     } catch (err) { showMessage($('authMessage'), 'Error al crear cuenta: ' + err.message, 'danger'); }
+  });
+
+  const resetForm = $('resetForm');
+  if (resetForm) resetForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      await sendLoginPasswordReset(getValue('resetEmail'));
+      showMessage($('authMessage'), 'Correo de recuperación enviado. Revisa tu bandeja de entrada o spam.', 'info');
+      switchAuthTab('login');
+    } catch (err) {
+      showMessage($('authMessage'), 'No se pudo enviar el correo: ' + err.message, 'danger');
+    }
   });
 
   $('sideNavEdge').addEventListener('click', () => setSideMenu(!$('sideNav').classList.contains('open')));

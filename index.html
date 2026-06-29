@@ -22,6 +22,7 @@
       <div class="auth-tabs">
         <button type="button" class="auth-tab active" data-auth-tab="login">Ingresar</button>
         <button type="button" class="auth-tab" data-auth-tab="register">Crear acceso</button>
+        <button type="button" class="auth-tab" data-auth-tab="reset">Restablecer</button>
       </div>
       <form id="loginForm" class="auth-form">
         <label for="loginEmail">Correo</label>
@@ -39,6 +40,12 @@
         <label for="registerPassword">Crear contraseña</label>
         <input id="registerPassword" type="password" minlength="6" autocomplete="new-password" required placeholder="Mínimo 6 caracteres" />
         <button type="submit" class="btn dark" style="width:100%; margin-top:12px;">Crear cuenta</button>
+      </form>
+      <form id="resetForm" class="auth-form hidden">
+        <div class="notice info">Escribe tu correo registrado y recibirás un enlace para crear una nueva contraseña.</div>
+        <label for="resetEmail">Correo</label>
+        <input id="resetEmail" type="email" autocomplete="email" required placeholder="usuario@correo.com" />
+        <button type="submit" class="btn dark" style="width:100%; margin-top:12px;">Enviar correo de recuperación</button>
       </form>
       <div id="authMessage" class="notice hidden"></div>
     </div>
