@@ -448,3 +448,192 @@ input[type="file"] { padding: 10px; }
   .side-bottom { gap: 6px; padding-top: 8px; }
   .side-bottom .btn { padding: 10px 12px; }
 }
+
+/* Usuarios - administración avanzada */
+.users-summary-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.users-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.user-card {
+  background: #fff;
+  border: 1px solid #e5edf5;
+  border-radius: 18px;
+  box-shadow: 0 8px 20px rgba(15,23,42,.05);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.user-card.inactive {
+  opacity: .78;
+  background: linear-gradient(135deg, #f8fafc, #fff);
+}
+.user-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.user-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 900;
+  flex: 0 0 auto;
+}
+.user-info { min-width: 0; flex: 1 1 auto; }
+.user-title-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.user-name-input {
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none !important;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 900;
+  background: transparent;
+  min-width: 170px;
+  flex: 1 1 220px;
+}
+.user-name-input:focus {
+  border-bottom: 2px solid var(--brand);
+  box-shadow: none;
+}
+.user-email {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.user-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.online-pill, .state-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+.online-pill.online,
+.state-pill.active,
+.state-pill.registered {
+  background: #dcfce7;
+  color: #14532d;
+  border-color: #bbf7d0;
+}
+.state-pill.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.state-pill.pending {
+  background: #fff7ed;
+  color: #9a3412;
+  border-color: #fed7aa;
+}
+.user-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.user-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.user-stats-row > div {
+  background: #f8fafc;
+  border: 1px solid #e5edf5;
+  border-radius: 14px;
+  padding: 10px;
+  min-width: 0;
+}
+.user-stats-row span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  margin-bottom: 4px;
+}
+.user-stats-row strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.user-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.user-actions .btn { min-height: 38px; padding: 9px 12px; }
+.user-history-panel {
+  margin-top: 14px;
+  background: #ffffff;
+  border: 1px solid #e5edf5;
+  border-radius: 18px;
+  box-shadow: 0 8px 20px rgba(15,23,42,.05);
+  padding: 14px;
+}
+.history-list { display: grid; gap: 8px; }
+.history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid #edf2f7;
+  border-radius: 14px;
+  padding: 10px;
+  background: #fbfdff;
+}
+.history-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+.history-numbers span {
+  border-radius: 999px;
+  background: #f1f5f9;
+  padding: 5px 8px;
+}
+
+@media (max-width: 760px) {
+  .users-summary-cards { grid-template-columns: 1fr 1fr; }
+  .user-card { padding: 12px; border-radius: 16px; }
+  .user-card-main { gap: 9px; }
+  .user-avatar { width: 40px; height: 40px; border-radius: 14px; font-size: 17px; }
+  .user-name-input { font-size: 16px; min-width: 140px; flex-basis: 100%; }
+  .user-edit-grid { grid-template-columns: 1fr; }
+  .user-stats-row { grid-template-columns: 1fr 1fr; }
+  .user-actions { justify-content: stretch; }
+  .user-actions .btn { width: 100%; }
+  .history-item { grid-template-columns: 1fr; }
+}

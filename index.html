@@ -147,19 +147,32 @@
     </section>
 
     <section id="tab-usuarios" class="panel admin-panel">
-      <h2>Usuarios</h2>
-      <div class="notice info">El administrador preautoriza un correo. El usuario luego crea su cuenta y contraseña desde “Crear acceso”.</div>
-      <div class="grid">
-        <div class="span-4"><label for="newUserName">Nombre</label><input id="newUserName" placeholder="Nombre del usuario" /></div>
-        <div class="span-4"><label for="newUserEmail">Correo</label><input id="newUserEmail" type="email" placeholder="usuario@correo.com" /></div>
-        <div class="span-2"><label for="newUserRole">Rol</label><select id="newUserRole"><option value="inventariador">Inventariador</option><option value="admin">Administrador</option></select></div>
-        <div class="span-2"><button class="btn" id="btnCreateUser" type="button">Autorizar</button></div>
+      <div class="panel-head">
+        <h2>Usuarios</h2>
+        <button class="panel-toggle" type="button" data-toggle-section="usersCreateBox" data-label-show="Mostrar creación de usuario" data-label-hide="Ocultar creación de usuario" aria-expanded="true" aria-controls="usersCreateBox"><span class="toggle-icon">▾</span><span class="toggle-text">Ocultar creación de usuario</span></button>
+      </div>
+      <div class="notice info">Administra usuarios, roles, colores, estado de acceso, actividad y recuperación de contraseña. Los usuarios autorizados crean su contraseña desde “Crear acceso”.</div>
+      <div id="usersCreateBox" class="collapsible-tools">
+        <div class="grid user-create-grid">
+          <div class="span-3"><label for="newUserName">Nombre</label><input id="newUserName" placeholder="Nombre del usuario" /></div>
+          <div class="span-3"><label for="newUserEmail">Correo</label><input id="newUserEmail" type="email" placeholder="usuario@correo.com" /></div>
+          <div class="span-2"><label for="newUserRole">Rol</label><select id="newUserRole"><option value="inventariador">Inventariador</option><option value="admin">Administrador</option></select></div>
+          <div class="span-2"><label for="newUserColor">Color</label><select id="newUserColor" class="user-color-select"><option value="0">Azul</option><option value="1">Verde</option><option value="2">Amarillo</option><option value="3">Rosa</option><option value="4">Morado</option><option value="5">Celeste</option><option value="6">Naranja</option><option value="7">Cian</option></select></div>
+          <div class="span-2"><button class="btn" id="btnCreateUser" type="button">Autorizar</button></div>
+        </div>
       </div>
       <div id="userMessage" class="notice hidden"></div>
-      <table class="user-table">
-        <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead>
-        <tbody id="usersBody"></tbody>
-      </table>
+      <div class="cards users-summary-cards">
+        <div class="card"><div class="label">Autorizados</div><div class="metric" id="uTotal">0</div></div>
+        <div class="card"><div class="label">Activos</div><div class="metric" id="uActive">0</div></div>
+        <div class="card"><div class="label">En línea</div><div class="metric" id="uOnline">0</div></div>
+        <div class="card"><div class="label">Administradores</div><div class="metric" id="uAdmins">0</div></div>
+      </div>
+      <div class="grid">
+        <div class="span-12"><label for="userSearch">Buscar usuario</label><input id="userSearch" placeholder="Nombre, correo, rol o estado" /></div>
+      </div>
+      <div id="usersBody" class="users-list"></div>
+      <div id="userHistoryPanel" class="user-history-panel hidden"></div>
     </section>
   </section>
 

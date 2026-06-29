@@ -8,6 +8,7 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   updatePassword,
+  sendPasswordResetEmail,
   signOut
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
@@ -35,11 +36,12 @@ const getValue = (id, fallback = '') => {
 };
 const nf = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 });
 const dtf = new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-const appVersion = 'PWA Firebase v1.5 swap-vista-carga';
+const appVersion = 'PWA Firebase v1.6 usuarios-admin';
 
 let app, auth, db;
 let unsubscribers = [];
 let heartbeatTimer = null;
+let userHeartbeatTimer = null;
 let deferredInstallPrompt = null;
 let factorModalRowId = null;
 const countSaveTimers = new Map();
@@ -51,6 +53,7 @@ const state = {
   counts: {},
   locks: {},
   allowedUsers: {},
+  registeredUsers: {},
   meta: {},
   activeLab: '',
   showOnlyDiff: false
@@ -229,6 +232,24 @@ function userColorClass(value) {
   return 'user-color-' + (Math.abs(hash) % 8);
 }
 
+const USER_COLOR_LABELS = ['Azul', 'Verde', 'Amarillo', 'Rosa', 'Morado', 'Celeste', 'Naranja', 'Cian'];
+function normalizeColor(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(7, Math.round(n))) : fallback;
+}
+function userColorFromData(userLike) {
+  if (userLike && userLike.color !== undefined && userLike.color !== null && userLike.color !== '') return 'user-color-' + normalizeColor(userLike.color);
+  return userColorClass(userLike?.email || userLike?.uid || userLike?.name || 'usuario');
+}
+function userColorOptions(selected) {
+  const s = normalizeColor(selected);
+  return USER_COLOR_LABELS.map((label, idx) => `<option value="${idx}" ${idx === s ? 'selected' : ''}>${label}</option>`).join('');
+}
+function userOnline(data) {
+  const last = Number(data?.lastActiveAtMs || data?.lastLoginAtMs || 0);
+  return data?.isOnline === true && last && (Date.now() - last < 2 * 60 * 1000);
+}
+
 function safeFileName(value) {
   return normalizeKey(value || 'TODOS').replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'inventario';
 }
@@ -257,56 +278,69 @@ async function login(email, password) {
 async function registerUser(name, email, password) {
   const lower = email.trim().toLowerCase();
   const cred = await createUserWithEmailAndPassword(auth, lower, password);
-  const role = lower === ADMIN_EMAIL.toLowerCase() ? 'admin' : await getAllowedRole(lower);
-  if (!role) {
+  const allowed = lower === ADMIN_EMAIL.toLowerCase()
+    ? { name: normalizeText(name) || 'Administrador', role: 'admin', active: true, color: 0 }
+    : await getAllowedUser(lower);
+  if (!allowed) {
     await signOut(auth);
-    throw new Error('Este correo no está autorizado. Solicita acceso al administrador.');
+    throw new Error('Este correo no está autorizado o está inactivo. Solicita acceso al administrador.');
   }
   await setDoc(doc(db, 'users', cred.user.uid), {
     uid: cred.user.uid,
-    name: normalizeText(name),
+    name: normalizeText(name) || allowed.name || lower.split('@')[0],
     email: lower,
-    role,
-    active: true,
+    role: allowed.role || 'inventariador',
+    color: normalizeColor(allowed.color, 0),
+    active: allowed.active !== false,
     createdAt: serverTimestamp(),
     createdAtMs: Date.now(),
     lastLoginAt: serverTimestamp(),
-    lastLoginAtMs: Date.now()
+    lastLoginAtMs: Date.now(),
+    lastActiveAt: serverTimestamp(),
+    lastActiveAtMs: Date.now(),
+    isOnline: true
   }, { merge: true });
 }
 
-async function getAllowedRole(email) {
-  const snap = await getDoc(doc(db, 'allowedEmails', email.toLowerCase()));
-  if (!snap.exists()) return '';
+async function getAllowedUser(email) {
+  const lower = email.toLowerCase();
+  const snap = await getDoc(doc(db, 'allowedEmails', lower));
+  if (!snap.exists()) return null;
   const data = snap.data();
-  if (data.active === false) return '';
-  return data.role || 'inventariador';
+  if (data.active === false) return null;
+  return { ...data, email: lower };
 }
 
 async function ensureProfile(user) {
   const ref = doc(db, 'users', user.uid);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    const data = snap.data();
-    await setDoc(ref, { lastLoginAt: serverTimestamp(), lastLoginAtMs: Date.now() }, { merge: true });
-    return { ...data, uid: user.uid };
-  }
   const lower = user.email.toLowerCase();
-  const role = lower === ADMIN_EMAIL.toLowerCase() ? 'admin' : await getAllowedRole(lower);
-  if (!role) throw new Error('Usuario autenticado, pero sin autorización en DERYI INVENTARIO.');
+  const isBootstrap = lower === ADMIN_EMAIL.toLowerCase();
+  const allowed = isBootstrap ? { name: 'Adrian', role: 'admin', active: true, color: 0 } : await getAllowedUser(lower);
+  if (!allowed) throw new Error('Usuario autenticado, pero sin autorización activa en DERYI INVENTARIO.');
+
+  const snap = await getDoc(ref);
+  const existing = snap.exists() ? snap.data() : {};
+  if (existing.active === false || allowed.active === false) throw new Error('Tu usuario está inactivo. Solicita activación al administrador.');
+
   const profile = {
     uid: user.uid,
-    name: user.displayName || lower.split('@')[0],
+    name: allowed.name || existing.name || user.displayName || lower.split('@')[0],
     email: lower,
-    role,
+    role: allowed.role || existing.role || 'inventariador',
+    color: normalizeColor(allowed.color, normalizeColor(existing.color, 0)),
     active: true,
-    createdAt: serverTimestamp(),
-    createdAtMs: Date.now(),
     lastLoginAt: serverTimestamp(),
-    lastLoginAtMs: Date.now()
+    lastLoginAtMs: Date.now(),
+    lastActiveAt: serverTimestamp(),
+    lastActiveAtMs: Date.now(),
+    isOnline: true
   };
+  if (!snap.exists()) {
+    profile.createdAt = serverTimestamp();
+    profile.createdAtMs = Date.now();
+  }
   await setDoc(ref, profile, { merge: true });
-  return profile;
+  return { ...existing, ...profile };
 }
 
 function applyRoleUI() {
@@ -347,7 +381,7 @@ function setSectionCollapsed(targetId, collapsed) {
 }
 
 function applyCollapsePrefs() {
-  ['adminViewControls', 'viewControls', 'genControls'].forEach(id => {
+  ['adminViewControls', 'viewControls', 'genControls', 'usersCreateBox'].forEach(id => {
     let collapsed = false;
     try { collapsed = localStorage.getItem('deryi_ui_' + id) === '1'; } catch {}
     setSectionCollapsed(id, collapsed);
@@ -378,6 +412,12 @@ function attachRealtimeListeners() {
       state.allowedUsers = Object.fromEntries(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
       renderUsers();
     }));
+    unsubscribers.push(onSnapshot(collection(db, 'users'), snap => {
+      state.registeredUsers = Object.fromEntries(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+      const self = state.user ? state.registeredUsers[state.user.uid] : null;
+      if (self && self.active === false) { alert('Tu usuario fue desactivado.'); signOut(auth); return; }
+      renderUsers();
+    }));
   }
 }
 
@@ -400,7 +440,8 @@ function getLabSummary() {
         lastMs: 0,
         lastUserName: '',
         lastUserEmail: '',
-        lastUserUid: ''
+        lastUserUid: '',
+        lastUserColor: ''
       });
     }
     const item = map.get(key);
@@ -414,6 +455,7 @@ function getLabSummary() {
         item.lastUserName = c.updatedByName || '';
         item.lastUserEmail = c.updatedByEmail || '';
         item.lastUserUid = c.updatedByUid || '';
+        item.lastUserColor = c.updatedByColor ?? '';
       }
       const diff = getDifference(row);
       if (diff < 0) item.missing++;
@@ -448,7 +490,7 @@ function buildLabListHtml() {
     const status = complete ? 'Completo' : locked ? `En proceso por ${escapeHtml(lock.userName || lock.userEmail || 'usuario')}` : mine ? 'En proceso por ti' : `${l.counted} / ${l.total}`;
     const sub = complete ? 'Inventario finalizado' : locked ? 'Laboratorio bloqueado temporalmente' : 'Tocar para generar inventario';
     const userLabel = l.lastUserName || l.lastUserEmail || '';
-    const colorClass = userColorClass(l.lastUserEmail || l.lastUserUid || l.lastUserName || l.lab);
+    const colorClass = l.lastUserColor !== '' ? 'user-color-' + normalizeColor(l.lastUserColor) : userColorClass(l.lastUserEmail || l.lastUserUid || l.lastUserName || l.lab);
     const userHtml = userLabel
       ? `<div class="lab-user-line">Último usuario: <span class="user-chip ${colorClass}">${escapeHtml(userLabel)}</span></div>`
       : '<div class="lab-user-line no-user">Usuario: sin registro</div>';
@@ -656,20 +698,107 @@ function renderLockBanner(lab) {
   }
 }
 
+function registeredByEmail() {
+  const byEmail = new Map();
+  for (const u of Object.values(state.registeredUsers || {})) {
+    if (u.email) byEmail.set(String(u.email).toLowerCase(), u);
+  }
+  return byEmail;
+}
+
+function countStatsForUser(email, uid) {
+  const e = String(email || '').toLowerCase();
+  const list = Object.values(state.counts || {}).filter(c => {
+    const ce = String(c.updatedByEmail || '').toLowerCase();
+    return (uid && c.updatedByUid === uid) || (e && ce === e);
+  }).sort((a,b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0));
+  return { total: list.length, last: list[0] || null, list };
+}
+
+function mergedUsers() {
+  const byEmail = registeredByEmail();
+  const map = new Map();
+  for (const a of Object.values(state.allowedUsers || {})) {
+    const email = String(a.email || a.id || '').toLowerCase();
+    if (!email) continue;
+    map.set(email, { ...a, email, registered: byEmail.get(email) || null });
+  }
+  for (const r of byEmail.values()) {
+    const email = String(r.email || '').toLowerCase();
+    if (!email || map.has(email)) continue;
+    map.set(email, { name: r.name, email, role: r.role, active: r.active, color: r.color, registered: r, onlyRegistered: true });
+  }
+  return [...map.values()].sort((a,b) => (a.name || a.email || '').localeCompare(b.name || b.email || '', 'es'));
+}
+
 function renderUsers() {
   const body = $('usersBody');
   if (!body) return;
-  const users = Object.values(state.allowedUsers || {}).sort((a,b) => (a.email || '').localeCompare(b.email || ''));
+  const queryText = normalizeKey(getValue('userSearch'));
+  let users = mergedUsers();
+  if (queryText) {
+    users = users.filter(u => normalizeKey([u.name, u.email, u.role, u.active === false ? 'inactivo' : 'activo', u.registered ? 'registrado' : 'pendiente'].join(' ')).includes(queryText));
+  }
+  const total = mergedUsers();
+  const setText = (id, value) => { const el = $(id); if (el) el.textContent = nf.format(value); };
+  setText('uTotal', total.length);
+  setText('uActive', total.filter(u => u.active !== false).length);
+  setText('uOnline', total.filter(u => userOnline(u.registered)).length);
+  setText('uAdmins', total.filter(u => (u.role || '') === 'admin').length);
+
   if (!users.length) {
-    body.innerHTML = '<tr><td colspan="4" class="muted">No hay usuarios autorizados todavía.</td></tr>';
+    body.innerHTML = '<div class="inventory-card-empty">No hay usuarios autorizados con ese filtro.</div>';
     return;
   }
-  body.innerHTML = users.map(u => `<tr>
-    <td data-label="Nombre">${escapeHtml(u.name || '-')}</td>
-    <td data-label="Correo">${escapeHtml(u.email || u.id)}</td>
-    <td data-label="Rol"><span class="role-pill ${u.role === 'admin' ? 'admin' : ''}">${escapeHtml(u.role || 'inventariador')}</span></td>
-    <td data-label="Estado">${u.active === false ? 'Inactivo' : 'Autorizado'}</td>
-  </tr>`).join('');
+
+  body.innerHTML = users.map(u => {
+    const email = String(u.email || u.id || '').toLowerCase();
+    const registered = u.registered || null;
+    const active = u.active !== false && registered?.active !== false;
+    const online = userOnline(registered);
+    const stats = countStatsForUser(email, registered?.uid || registered?.id);
+    const color = normalizeColor(u.color ?? registered?.color, 0);
+    const colorClass = 'user-color-' + color;
+    const isMainAdmin = email === ADMIN_EMAIL.toLowerCase();
+    const lastAccess = registered?.lastLoginAtMs ? fmtDate(registered.lastLoginAtMs) : 'Sin ingreso registrado';
+    const lastActive = registered?.lastActiveAtMs ? fmtDate(registered.lastActiveAtMs) : 'Sin actividad registrada';
+    const lastCount = stats.last?.updatedAtMs ? fmtDate(stats.last.updatedAtMs) : 'Sin conteos';
+    return `<article class="user-card ${active ? '' : 'inactive'}" data-user-email="${escapeHtml(email)}" data-user-uid="${escapeHtml(registered?.uid || registered?.id || '')}">
+      <div class="user-card-main">
+        <div class="user-avatar ${colorClass}">${escapeHtml((u.name || email || '?').slice(0,1).toUpperCase())}</div>
+        <div class="user-info">
+          <div class="user-title-row">
+            <input class="user-name-input" data-user-field="name" value="${escapeHtml(u.name || registered?.name || '')}" ${isMainAdmin ? 'readonly' : ''} />
+            <span class="online-pill ${online ? 'online' : ''}">${online ? 'En línea' : 'Fuera de línea'}</span>
+          </div>
+          <div class="user-email">${escapeHtml(email)}</div>
+          <div class="user-meta">
+            <span class="role-pill ${(u.role || registered?.role) === 'admin' ? 'admin' : ''}">${escapeHtml(u.role || registered?.role || 'inventariador')}</span>
+            <span class="state-pill ${active ? 'active' : 'inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
+            <span class="state-pill ${registered ? 'registered' : 'pending'}">${registered ? 'Registrado' : 'Pendiente'}</span>
+            <span class="user-chip ${colorClass}">${USER_COLOR_LABELS[color]}</span>
+          </div>
+        </div>
+      </div>
+      <div class="user-edit-grid">
+        <div><label>Rol</label><select data-user-field="role" ${isMainAdmin ? 'disabled' : ''}><option value="inventariador" ${(u.role || registered?.role) !== 'admin' ? 'selected' : ''}>Inventariador</option><option value="admin" ${(u.role || registered?.role) === 'admin' ? 'selected' : ''}>Administrador</option></select></div>
+        <div><label>Estado</label><select data-user-field="active" ${isMainAdmin ? 'disabled' : ''}><option value="true" ${active ? 'selected' : ''}>Activo</option><option value="false" ${!active ? 'selected' : ''}>Inactivo</option></select></div>
+        <div><label>Color</label><select data-user-field="color">${userColorOptions(color)}</select></div>
+      </div>
+      <div class="user-stats-row">
+        <div><span>Conteos</span><strong>${nf.format(stats.total)}</strong></div>
+        <div><span>Último conteo</span><strong>${escapeHtml(lastCount)}</strong></div>
+        <div><span>Último acceso</span><strong>${escapeHtml(lastAccess)}</strong></div>
+        <div><span>Última actividad</span><strong>${escapeHtml(lastActive)}</strong></div>
+      </div>
+      <div class="user-actions">
+        <button class="btn" type="button" data-user-action="save">Guardar</button>
+        <button class="btn secondary" type="button" data-user-action="history">Historial</button>
+        <button class="btn secondary" type="button" data-user-action="reset">Restablecer contraseña</button>
+        <button class="btn danger" type="button" data-user-action="delete" ${isMainAdmin ? 'disabled' : ''}>Eliminar autorización</button>
+      </div>
+    </article>`;
+  }).join('');
 }
 
 function isEditingCountInput() {
@@ -712,17 +841,111 @@ async function createAllowedUser() {
   const name = normalizeText(getValue('newUserName'));
   const email = normalizeText(getValue('newUserEmail')).toLowerCase();
   const role = getValue('newUserRole', 'inventariador');
+  const color = normalizeColor(getValue('newUserColor', '0'));
   if (!name || !email) return showMessage($('userMessage'), 'Ingresa nombre y correo.', 'warn');
   await setDoc(doc(db, 'allowedEmails', email), {
-    name, email, role, active: true,
+    name, email, role, color, active: true,
     createdByUid: state.user.uid,
     createdByEmail: state.user.email,
     createdAt: serverTimestamp(),
-    createdAtMs: Date.now()
+    createdAtMs: Date.now(),
+    updatedAt: serverTimestamp(),
+    updatedAtMs: Date.now()
   }, { merge: true });
   $('newUserName').value = '';
   $('newUserEmail').value = '';
+  $('newUserColor').value = String((color + 1) % 8);
   showMessage($('userMessage'), `Usuario autorizado: ${email}. Ya puede crear su contraseña desde “Crear acceso”.`, 'info');
+}
+
+function getUserCardData(card) {
+  const email = card?.dataset?.userEmail || '';
+  const uid = card?.dataset?.userUid || '';
+  const field = name => card.querySelector(`[data-user-field="${name}"]`);
+  return {
+    email,
+    uid,
+    name: normalizeText(field('name')?.value || ''),
+    role: field('role')?.value || 'inventariador',
+    active: (field('active')?.value || 'true') === 'true',
+    color: normalizeColor(field('color')?.value || 0)
+  };
+}
+
+async function saveUserCard(card) {
+  const data = getUserCardData(card);
+  if (!data.email) return;
+  if (data.email === ADMIN_EMAIL.toLowerCase()) {
+    data.role = 'admin';
+    data.active = true;
+  }
+  if (!data.name) return showMessage($('userMessage'), 'El nombre no puede quedar vacío.', 'warn');
+  await setDoc(doc(db, 'allowedEmails', data.email), {
+    name: data.name,
+    email: data.email,
+    role: data.role,
+    active: data.active,
+    color: data.color,
+    updatedByUid: state.user.uid,
+    updatedByEmail: state.user.email,
+    updatedAt: serverTimestamp(),
+    updatedAtMs: Date.now()
+  }, { merge: true });
+  if (data.uid) {
+    await setDoc(doc(db, 'users', data.uid), {
+      name: data.name,
+      role: data.role,
+      active: data.active,
+      color: data.color,
+      updatedByUid: state.user.uid,
+      updatedByEmail: state.user.email,
+      updatedAt: serverTimestamp(),
+      updatedAtMs: Date.now()
+    }, { merge: true });
+  }
+  showMessage($('userMessage'), `Usuario actualizado: ${data.email}`, 'info');
+}
+
+async function deleteUserCard(card) {
+  const data = getUserCardData(card);
+  if (!data.email || data.email === ADMIN_EMAIL.toLowerCase()) return;
+  if (!confirm(`Se eliminará la autorización de ${data.email}. La cuenta de Firebase no se borra, pero no podrá volver a ingresar. ¿Continuar?`)) return;
+  await deleteDoc(doc(db, 'allowedEmails', data.email));
+  if (data.uid) {
+    await setDoc(doc(db, 'users', data.uid), {
+      active: false,
+      isOnline: false,
+      disabledAt: serverTimestamp(),
+      disabledAtMs: Date.now(),
+      disabledByUid: state.user.uid,
+      disabledByEmail: state.user.email
+    }, { merge: true });
+  }
+  showMessage($('userMessage'), `Autorización eliminada: ${data.email}`, 'warn');
+}
+
+async function resetUserPassword(card) {
+  const data = getUserCardData(card);
+  if (!data.email) return;
+  await sendPasswordResetEmail(auth, data.email);
+  showMessage($('userMessage'), `Se envió correo de restablecimiento a ${data.email}.`, 'info');
+}
+
+function showUserHistory(card) {
+  const data = getUserCardData(card);
+  const panel = $('userHistoryPanel');
+  if (!panel || !data.email) return;
+  const stats = countStatsForUser(data.email, data.uid);
+  const rows = stats.list.slice(0, 30);
+  panel.classList.remove('hidden');
+  panel.innerHTML = `<div class="panel-head"><h3>Historial de ${escapeHtml(data.name || data.email)}</h3><button class="btn secondary" type="button" data-user-action="close-history">Cerrar historial</button></div>
+    <div class="notice info">Mostrando los últimos ${nf.format(rows.length)} movimientos de ${nf.format(stats.total)} conteos registrados para este usuario.</div>
+    ${rows.length ? `<div class="history-list">${rows.map(c => `<div class="history-item">
+      <div><strong>${escapeHtml(c.laboratorio || '-')}</strong><div class="small">${escapeHtml(c.descripcion || '-')}</div></div>
+      <div class="history-numbers"><span>Físico: <strong>${nf.format(c.total ?? 0)}</strong></span><span>Diferencia: <strong>${c.diff === null || c.diff === undefined ? '-' : nf.format(c.diff)}</strong></span><span>${escapeHtml(noveltyText(c.diff))}</span></div>
+      <div class="small">${escapeHtml(fmtDate(c.updatedAtMs))}</div>
+    </div>`).join('')}</div>` : '<div class="inventory-card-empty">Este usuario todavía no tiene conteos registrados.</div>'}`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function findHeaderRow(rows) {
@@ -999,6 +1222,7 @@ function updateCountCardVisual(input) {
     updatedByUid: state.user?.uid || '',
     updatedByName: state.profile?.name || state.user?.email || '',
     updatedByEmail: state.user?.email || '',
+    updatedByColor: normalizeColor(state.profile?.color, 0),
     updatedAtMs: Date.now(),
     localDraft: true
   };
@@ -1032,6 +1256,7 @@ async function updateCountFromInput(input) {
     updatedByUid: state.user.uid,
     updatedByName: state.profile?.name || state.user.email,
     updatedByEmail: state.user.email,
+    updatedByColor: normalizeColor(state.profile?.color, 0),
     updatedAt: serverTimestamp(),
     updatedAtMs: Date.now()
   };
@@ -1190,6 +1415,28 @@ function exportCsv() {
   a.remove();
 }
 
+async function updateCurrentUserPresence(isOnline = true) {
+  if (!state.user) return;
+  try {
+    await setDoc(doc(db, 'users', state.user.uid), {
+      isOnline,
+      lastActiveAt: serverTimestamp(),
+      lastActiveAtMs: Date.now()
+    }, { merge: true });
+  } catch (err) { console.warn('No se pudo actualizar presencia', err); }
+}
+
+function startUserPresence() {
+  stopUserPresence();
+  updateCurrentUserPresence(true);
+  userHeartbeatTimer = setInterval(() => updateCurrentUserPresence(true), 60 * 1000);
+}
+
+function stopUserPresence() {
+  if (userHeartbeatTimer) clearInterval(userHeartbeatTimer);
+  userHeartbeatTimer = null;
+}
+
 function attachEvents() {
   document.querySelectorAll('.auth-tab').forEach(btn => btn.addEventListener('click', () => switchAuthTab(btn.dataset.authTab)));
   $('loginForm').addEventListener('submit', async e => {
@@ -1217,10 +1464,12 @@ function attachEvents() {
     setSectionCollapsed(btn.dataset.toggleSection, !target.classList.contains('collapsed'));
   }));
 
-  $('logoutBtn').addEventListener('click', async () => { await releaseActiveLab(); await signOut(auth); });
+  $('logoutBtn').addEventListener('click', async () => { await releaseActiveLab(); await updateCurrentUserPresence(false); stopUserPresence(); await signOut(auth); });
   $('btnLoadFile').addEventListener('click', loadFile);
   $('btnRefreshCloud').addEventListener('click', renderAll);
   $('btnCreateUser').addEventListener('click', () => createAllowedUser().catch(err => showMessage($('userMessage'), err.message, 'danger')));
+  const userSearch = $('userSearch');
+  if (userSearch) userSearch.addEventListener('input', renderUsers);
   ['adminViewLab','adminViewDesc','adminViewAny'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', renderAdminInventory); });
   ['genLab','genSearch'].forEach(id => $(id).addEventListener('input', renderGeneration));
   $('btnOnlyDiff').addEventListener('click', () => { state.showOnlyDiff = !state.showOnlyDiff; renderGeneration(); });
@@ -1235,6 +1484,16 @@ function attachEvents() {
     if (labBtn) takeLab(labBtn.dataset.labOpen);
     const factorBtn = e.target.closest('[data-factor-edit]');
     if (factorBtn) openFactorModal(factorBtn.dataset.factorEdit);
+    const userAction = e.target.closest('[data-user-action]');
+    if (userAction) {
+      const action = userAction.dataset.userAction;
+      const card = userAction.closest('.user-card');
+      if (action === 'save') saveUserCard(card).catch(err => showMessage($('userMessage'), err.message, 'danger'));
+      if (action === 'delete') deleteUserCard(card).catch(err => showMessage($('userMessage'), err.message, 'danger'));
+      if (action === 'reset') resetUserPassword(card).catch(err => showMessage($('userMessage'), 'No se pudo enviar correo: ' + err.message, 'danger'));
+      if (action === 'history') showUserHistory(card);
+      if (action === 'close-history') $('userHistoryPanel')?.classList.add('hidden');
+    }
   });
   document.body.addEventListener('input', e => {
     if (e.target.classList.contains('count-input')) scheduleCountSave(e.target);
@@ -1255,8 +1514,8 @@ function attachEvents() {
   $('btnSaveFactor').addEventListener('click', () => saveFactorFromModal().catch(err => alert(err.message)));
   $('factorModal').addEventListener('click', e => { if (e.target.id === 'factorModal') closeFactorModal(); });
 
-  window.addEventListener('beforeunload', () => { releaseActiveLab(); });
-  window.addEventListener('pagehide', () => { releaseActiveLab(); });
+  window.addEventListener('beforeunload', () => { releaseActiveLab(); updateCurrentUserPresence(false); });
+  window.addEventListener('pagehide', () => { releaseActiveLab(); updateCurrentUserPresence(false); });
   window.addEventListener('online', () => $('syncState').textContent = 'En línea');
   window.addEventListener('offline', () => $('syncState').textContent = 'Sin conexión');
 
@@ -1282,6 +1541,7 @@ function authReady() {
       unsubscribers.forEach(fn => fn());
       unsubscribers = [];
       stopHeartbeat();
+      stopUserPresence();
       $('authPage').classList.remove('hidden');
       $('appPage').classList.add('hidden');
       return;
@@ -1291,6 +1551,7 @@ function authReady() {
       $('authPage').classList.add('hidden');
       $('appPage').classList.remove('hidden');
       applyRoleUI();
+      startUserPresence();
       attachRealtimeListeners();
       applyCollapsePrefs();
       switchTab(isAdmin() ? 'carga' : 'vista');
