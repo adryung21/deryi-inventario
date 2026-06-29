@@ -36,7 +36,7 @@ const getValue = (id, fallback = '') => {
 };
 const nf = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 });
 const dtf = new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-const appVersion = 'PWA Firebase v1.6 usuarios-admin';
+const appVersion = 'PWA Firebase v1.7 usuarios-borrar';
 
 let app, auth, db;
 let unsubscribers = [];
@@ -795,7 +795,7 @@ function renderUsers() {
         <button class="btn" type="button" data-user-action="save">Guardar</button>
         <button class="btn secondary" type="button" data-user-action="history">Historial</button>
         <button class="btn secondary" type="button" data-user-action="reset">Restablecer contraseña</button>
-        <button class="btn danger" type="button" data-user-action="delete" ${isMainAdmin ? 'disabled' : ''}>Eliminar autorización</button>
+        <button class="btn danger" type="button" data-user-action="delete" ${isMainAdmin ? 'disabled' : ''}>Borrar usuario</button>
       </div>
     </article>`;
   }).join('');
@@ -909,26 +909,29 @@ async function saveUserCard(card) {
 async function deleteUserCard(card) {
   const data = getUserCardData(card);
   if (!data.email || data.email === ADMIN_EMAIL.toLowerCase()) return;
-  if (!confirm(`Se eliminará la autorización de ${data.email}. La cuenta de Firebase no se borra, pero no podrá volver a ingresar. ¿Continuar?`)) return;
+  if (!confirm(`Se borrará el usuario ${data.email} del aplicativo. Se eliminará su autorización y perfil de la app. La cuenta de Firebase Authentication no se borra desde GitHub Pages; si quieres eliminarla totalmente, hazlo desde Firebase Console > Authentication. ¿Continuar?`)) return;
   await deleteDoc(doc(db, 'allowedEmails', data.email));
   if (data.uid) {
-    await setDoc(doc(db, 'users', data.uid), {
-      active: false,
-      isOnline: false,
-      disabledAt: serverTimestamp(),
-      disabledAtMs: Date.now(),
-      disabledByUid: state.user.uid,
-      disabledByEmail: state.user.email
-    }, { merge: true });
+    try { await deleteDoc(doc(db, 'users', data.uid)); } catch (err) {
+      await setDoc(doc(db, 'users', data.uid), {
+        active: false,
+        deleted: true,
+        isOnline: false,
+        disabledAt: serverTimestamp(),
+        disabledAtMs: Date.now(),
+        disabledByUid: state.user.uid,
+        disabledByEmail: state.user.email
+      }, { merge: true });
+    }
   }
-  showMessage($('userMessage'), `Autorización eliminada: ${data.email}`, 'warn');
+  showMessage($('userMessage'), `Usuario borrado del aplicativo: ${data.email}`, 'warn');
 }
 
 async function resetUserPassword(card) {
   const data = getUserCardData(card);
   if (!data.email) return;
   await sendPasswordResetEmail(auth, data.email);
-  showMessage($('userMessage'), `Se envió correo de restablecimiento a ${data.email}.`, 'info');
+  showMessage($('userMessage'), `Firebase envió un correo de restablecimiento a ${data.email}. El usuario debe abrir el enlace del correo y crear una nueva contraseña.`, 'info');
 }
 
 function showUserHistory(card) {

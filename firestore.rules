@@ -7,14 +7,32 @@ service cloud.firestore {
     function isBootstrapAdmin() {
       return signedIn() && request.auth.token.email == 'adrian90.2y@gmail.com';
     }
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+    function hasUserDoc() {
+      return signedIn() && exists(userPath(request.auth.uid));
+    }
     function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return get(userPath(request.auth.uid));
+    }
+    function isActiveUser() {
+      return isBootstrapAdmin() || (
+        hasUserDoc()
+        && userDoc().data.active != false
+        && userDoc().data.deleted != true
+      );
     }
     function isAdmin() {
-      return isBootstrapAdmin() || (signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userDoc().data.role == 'admin');
+      return isBootstrapAdmin() || (
+        isActiveUser()
+        && userDoc().data.role == 'admin'
+      );
     }
     function isAllowedEmail() {
-      return signedIn() && exists(/databases/$(database)/documents/allowedEmails/$(request.auth.token.email));
+      return signedIn()
+        && exists(/databases/$(database)/documents/allowedEmails/$(request.auth.token.email))
+        && get(/databases/$(database)/documents/allowedEmails/$(request.auth.token.email)).data.active != false;
     }
 
     match /allowedEmails/{email} {
@@ -23,21 +41,21 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid && isActiveUser());
       allow create: if signedIn() && request.auth.uid == uid && (isBootstrapAdmin() || isAllowedEmail());
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && isActiveUser());
       allow delete: if isAdmin();
     }
 
     match /inventory/{productId} {
-      allow read: if signedIn();
+      allow read: if isActiveUser();
       allow create, update, delete: if isAdmin();
     }
 
     match /counts/{productId} {
-      allow read: if signedIn();
+      allow read: if isActiveUser();
       allow create, update: if isAdmin() || (
-        signedIn()
+        isActiveUser()
         && request.resource.data.labKey is string
         && exists(/databases/$(database)/documents/labLocks/$(request.resource.data.labKey))
         && get(/databases/$(database)/documents/labLocks/$(request.resource.data.labKey)).data.lockedByUid == request.auth.uid
@@ -48,10 +66,10 @@ service cloud.firestore {
     }
 
     match /labLocks/{labKey} {
-      allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.lockedByUid == request.auth.uid;
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() && request.resource.data.lockedByUid == request.auth.uid;
       allow update: if isAdmin() || (
-        signedIn() && (
+        isActiveUser() && (
           resource.data.lockedByUid == request.auth.uid
           || resource.data.status != 'active'
           || resource.data.expiresAtMs <= request.time.toMillis()
@@ -61,13 +79,13 @@ service cloud.firestore {
     }
 
     match /labCompletions/{labKey} {
-      allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser();
       allow delete: if isAdmin();
     }
 
     match /appMeta/{docId} {
-      allow read: if signedIn();
+      allow read: if isActiveUser();
       allow create, update, delete: if isAdmin();
     }
   }
