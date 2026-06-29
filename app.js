@@ -35,13 +35,14 @@ const getValue = (id, fallback = '') => {
 };
 const nf = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 });
 const dtf = new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-const appVersion = 'PWA Firebase v1.1';
+const appVersion = 'PWA Firebase v1.2';
 
 let app, auth, db;
 let unsubscribers = [];
 let heartbeatTimer = null;
 let deferredInstallPrompt = null;
 let factorModalRowId = null;
+const countSaveTimers = new Map();
 
 const state = {
   user: null,
@@ -876,32 +877,46 @@ async function finishActiveLab() {
   alert('Laboratorio finalizado y liberado.');
 }
 
-async function updateCountFromInput(input) {
+function readCountCard(input) {
   const row = state.inventory.find(r => r.id === input.dataset.rowId);
-  if (!row) return;
+  const card = input.closest('[data-row-id]');
+  if (!row || !card) return null;
+  const enteroInput = card.querySelector('[data-count-kind="enteros"]');
+  const unidadInput = card.querySelector('[data-count-kind="unidades"]');
+  if (!enteroInput || !unidadInput) return null;
+  const enteros = enteroInput.value === '' ? '' : Math.max(0, Math.round(Number(enteroInput.value) || 0));
+  const unidades = unidadInput.value === '' ? '' : Math.max(0, Math.round(Number(unidadInput.value) || 0));
+  const total = ((Number(enteros) || 0) * (Number(row.unitsPerEntero) || 1)) + (Number(unidades) || 0);
+  const diff = Math.round((total - (Number(row.totalUnits) || 0)) * 100) / 100;
+  return { row, card, enteroInput, unidadInput, enteros, unidades, total, diff };
+}
+
+function updateCountCardVisual(input) {
+  const data = readCountCard(input);
+  if (!data) return null;
+  const cls = diffClass(data.diff);
+  [data.enteroInput, data.unidadInput, data.card.querySelector('.count-total-value')].filter(Boolean).forEach(el => {
+    el.classList.remove('diff-negative', 'diff-positive', 'diff-zero');
+    if (cls) el.classList.add(cls);
+  });
+  const totalEl = data.card.querySelector('.count-total-value');
+  if (totalEl) totalEl.textContent = nf.format(data.total);
+  const diffEl = data.card.querySelector('.diff-inline');
+  if (diffEl) diffEl.innerHTML = diffInline(data.diff);
+  return data;
+}
+
+async function updateCountFromInput(input) {
+  const data = updateCountCardVisual(input);
+  if (!data) return;
+  const { row, enteros, unidades, total, diff } = data;
   if (!isLabLockedByCurrent(row.laboratorio)) {
     input.blur();
     alert('Este laboratorio no está tomado por tu usuario.');
     renderGeneration();
     return;
   }
-  const card = input.closest('[data-row-id]');
-  if (!card) {
-    console.warn('No se encontró la tarjeta del producto para actualizar el conteo.');
-    return;
-  }
-  const enteroInput = card.querySelector('[data-count-kind="enteros"]');
-  const unidadInput = card.querySelector('[data-count-kind="unidades"]');
-  if (!enteroInput || !unidadInput) {
-    console.warn('No se encontraron las casillas de enteros/unidades para actualizar el conteo.', { rowId: row.id });
-    renderGeneration();
-    return;
-  }
-  const enteros = enteroInput.value === '' ? '' : Math.max(0, Math.round(Number(enteroInput.value) || 0));
-  const unidades = unidadInput.value === '' ? '' : Math.max(0, Math.round(Number(unidadInput.value) || 0));
-  const total = ((Number(enteros) || 0) * (Number(row.unitsPerEntero) || 1)) + (Number(unidades) || 0);
-  const diff = Math.round((total - (Number(row.totalUnits) || 0)) * 100) / 100;
-  await setDoc(doc(db, 'counts', row.id), {
+  const payload = {
     productId: row.id,
     laboratorio: row.laboratorio,
     labKey: row.labKey,
@@ -920,8 +935,24 @@ async function updateCountFromInput(input) {
     updatedByEmail: state.user.email,
     updatedAt: serverTimestamp(),
     updatedAtMs: Date.now()
-  }, { merge: true });
+  };
+  state.counts[row.id] = { ...(state.counts[row.id] || {}), ...payload };
+  updateGenerationSummary();
+  await setDoc(doc(db, 'counts', row.id), payload, { merge: true });
   await touchActiveLock();
+}
+
+function scheduleCountSave(input) {
+  const data = updateCountCardVisual(input);
+  if (!data) return;
+  const key = data.row.id;
+  clearTimeout(countSaveTimers.get(key));
+  countSaveTimers.set(key, setTimeout(() => {
+    updateCountFromInput(input).catch(err => {
+      console.error(err);
+      alert('No se pudo guardar el conteo: ' + (err.message || err));
+    });
+  }, 450));
 }
 
 function openFactorModal(id) {
@@ -1089,8 +1120,15 @@ function attachEvents() {
     const factorBtn = e.target.closest('[data-factor-edit]');
     if (factorBtn) openFactorModal(factorBtn.dataset.factorEdit);
   });
+  document.body.addEventListener('input', e => {
+    if (e.target.classList.contains('count-input')) scheduleCountSave(e.target);
+  });
   document.body.addEventListener('change', e => {
-    if (e.target.classList.contains('count-input')) updateCountFromInput(e.target).catch(err => { console.error(err); alert('No se pudo guardar el conteo: ' + (err.message || err)); });
+    if (e.target.classList.contains('count-input')) {
+      const data = readCountCard(e.target);
+      if (data) clearTimeout(countSaveTimers.get(data.row.id));
+      updateCountFromInput(e.target).catch(err => { console.error(err); alert('No se pudo guardar el conteo: ' + (err.message || err)); });
+    }
   });
   document.body.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closeFactorModal(); setSideMenu(false); }
