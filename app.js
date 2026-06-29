@@ -35,7 +35,7 @@ const getValue = (id, fallback = '') => {
 };
 const nf = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 });
 const dtf = new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-const appVersion = 'PWA Firebase v1.2';
+const appVersion = 'PWA Firebase v1.3 diferencia';
 
 let app, auth, db;
 let unsubscribers = [];
@@ -889,16 +889,20 @@ async function finishActiveLab() {
 
 function readCountCard(input) {
   const row = state.inventory.find(r => r.id === input.dataset.rowId);
-  const card = input.closest('[data-row-id]');
+  // El input también tiene data-row-id; por eso NO debemos usar
+  // input.closest('[data-row-id]'), porque devuelve el propio input y no la tarjeta.
+  // Esto impedía encontrar el otro campo, el total y la diferencia.
+  const card = input.closest('.gen-product-card');
   if (!row || !card) return null;
-  const enteroInput = card.querySelector('[data-count-kind="enteros"]');
-  const unidadInput = card.querySelector('[data-count-kind="unidades"]');
+  const enteroInput = card.querySelector('input.count-input[data-count-kind="enteros"]');
+  const unidadInput = card.querySelector('input.count-input[data-count-kind="unidades"]');
   if (!enteroInput || !unidadInput) return null;
-  const enteros = enteroInput.value === '' ? '' : Math.max(0, Math.round(Number(enteroInput.value) || 0));
-  const unidades = unidadInput.value === '' ? '' : Math.max(0, Math.round(Number(unidadInput.value) || 0));
-  const total = ((Number(enteros) || 0) * (Number(row.unitsPerEntero) || 1)) + (Number(unidades) || 0);
-  const diff = Math.round((total - (Number(row.totalUnits) || 0)) * 100) / 100;
-  return { row, card, enteroInput, unidadInput, enteros, unidades, total, diff };
+  const enteros = enteroInput.value === '' ? '' : Math.max(0, Math.round(Number(String(enteroInput.value).replace(',', '.')) || 0));
+  const unidades = unidadInput.value === '' ? '' : Math.max(0, Math.round(Number(String(unidadInput.value).replace(',', '.')) || 0));
+  const counted = enteroInput.value !== '' || unidadInput.value !== '';
+  const total = counted ? ((Number(enteros) || 0) * (Number(row.unitsPerEntero) || 1)) + (Number(unidades) || 0) : '';
+  const diff = counted ? Math.round(((Number(total) || 0) - (Number(row.totalUnits) || 0)) * 100) / 100 : null;
+  return { row, card, enteroInput, unidadInput, enteros, unidades, total, diff, counted };
 }
 
 function updateCountCardVisual(input) {
@@ -910,7 +914,7 @@ function updateCountCardVisual(input) {
     if (cls) el.classList.add(cls);
   });
   const totalEl = data.card.querySelector('.count-total-value');
-  if (totalEl) totalEl.textContent = nf.format(data.total);
+  if (totalEl) totalEl.textContent = data.counted ? nf.format(data.total) : '-';
   const diffEl = data.card.querySelector('.diff-inline');
   if (diffEl) diffEl.innerHTML = diffInline(data.diff);
   // Guardado local inmediato para evitar que una actualización en tiempo real borre lo digitado
@@ -927,7 +931,7 @@ function updateCountCardVisual(input) {
     systemTotal: data.row.totalUnits,
     physicalEnteros: data.enteros === '' ? '' : data.enteros,
     physicalUnidades: data.unidades === '' ? '' : data.unidades,
-    total: data.total,
+    total: data.counted ? data.total : '',
     diff: data.diff,
     novelty: noveltyText(data.diff),
     updatedByUid: state.user?.uid || '',
@@ -960,7 +964,7 @@ async function updateCountFromInput(input) {
     systemTotal: row.totalUnits,
     physicalEnteros: enteros === '' ? 0 : enteros,
     physicalUnidades: unidades === '' ? 0 : unidades,
-    total,
+    total: total === '' ? 0 : total,
     diff,
     novelty: noveltyText(diff),
     updatedByUid: state.user.uid,
