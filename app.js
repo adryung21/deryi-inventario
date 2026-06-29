@@ -35,7 +35,7 @@ const getValue = (id, fallback = '') => {
 };
 const nf = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 });
 const dtf = new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-const appVersion = 'PWA Firebase v1.3 diferencia';
+const appVersion = 'PWA Firebase v1.4 update-summary';
 
 let app, auth, db;
 let unsubscribers = [];
@@ -630,6 +630,22 @@ function renderUsers() {
 function isEditingCountInput() {
   const active = document.activeElement;
   return !!(active && active.classList && active.classList.contains('count-input') && active.closest('#tab-generacion'));
+}
+
+
+function updateGenerationSummary() {
+  // Actualiza solo métricas y aviso del laboratorio sin redibujar las tarjetas.
+  // Esto evita borrar lo que el usuario está digitando y corrige el error:
+  // updateGenerationSummary is not defined.
+  const rows = filteredGenerationRows();
+  const counted = rows.filter(r => hasPhysical(r));
+  const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+  setText('gItems', nf.format(rows.length));
+  setText('gCounted', nf.format(counted.length));
+  setText('gMissing', nf.format(counted.filter(r => getDifference(r) < 0).length));
+  setText('gSurplus', nf.format(counted.filter(r => getDifference(r) > 0).length));
+  const lab = selectedExactLab();
+  if ($('lockBanner')) renderLockBanner(lab);
 }
 
 function renderAll() {
